@@ -34,6 +34,12 @@ def run() -> int:
         description="BooksToScrape crawler - data/items.jsonl"
     )
     parser.add_argument(
+        "--site",
+        type=str,
+        default="books",
+        help="Named site preset (currently only 'books').",
+    )
+    parser.add_argument(
         "--start",
         type=str,
         default="https://books.toscrape.com/",
@@ -68,10 +74,16 @@ def run() -> int:
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    log = logging.getLogger("main")
+    log = logging.getLogger("scraper.main")
 
     start_url = args.start
     base_url = _root_of(start_url)
+
+    if args.site != "books":
+        log.warning(
+            "Site preset '%s' is not recognized. Proceeding with provided start URL.",
+            args.site,
+        )
 
     robots = RobotsHandler(base_url=base_url, user_agent=args.user_agent)
     robots_delay_ms = robots.get_crawl_delay_ms()
@@ -88,7 +100,7 @@ def run() -> int:
         base_delay_ms=effective_delay_ms,
     )
 
-    data_path = Path(__file__).resolve().parents[1] / "data" / "items.jsonl"
+    data_path = Path(__file__).resolve().parent / "data" / "items.jsonl"
     visited_pages: set[str] = set()
     seen_item_keys: set[str] = set()
     current_url = start_url
@@ -104,6 +116,8 @@ def run() -> int:
                     )
                     break
                 visited_pages.add(current_url)
+
+                assert current_url.startswith(("http://", "https://")), current_url
 
                 if not robots.can_fetch(current_url):
                     log.warning("Robots disallows page %s. Stopping.", current_url)

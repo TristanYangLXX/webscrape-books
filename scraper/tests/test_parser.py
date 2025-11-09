@@ -1,4 +1,4 @@
-from src.parser import parse_books_list, parse_books_detail
+from scraper.parser import parse_books_list, parse_books_detail
 
 LIST_HTML = """
 <html>

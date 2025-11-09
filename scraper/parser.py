@@ -11,6 +11,12 @@ from .types import BookItem
 _RATING_MAP = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5}
 
 
+def _abs(href: str | None, base: str) -> Optional[str]:
+    if not href:
+        return None
+    return urljoin(base, href)
+
+
 def _rating_from_classes(classes: list[str] | None) -> int:
     if not classes:
         return 0
@@ -48,8 +54,9 @@ def parse_books_list(html: str, base_url: str, page_url: str) -> Tuple[List[Book
             continue
 
         title = _clean_ws(a.get("title") or a.get_text(" "))
-        href = a["href"]
-        url = urljoin(base_url, href)
+        url = _abs(a.get("href"), base_url)
+        if not url:
+            continue
 
         price_el = pod.select_one("p.price_color")
         price = _parse_price(price_el.get_text(" ")) if price_el else 0.0
@@ -73,17 +80,7 @@ def parse_books_list(html: str, base_url: str, page_url: str) -> Tuple[List[Book
         items.append(item)
 
     next_link = soup.select_one("li.next a")
-    if next_link and next_link.get("href"):
-        href = next_link["href"]
-        if href.startswith("../") and "/catalogue/" in page_url:
-            href = href.replace("../", "", 1)
-        if page_url.endswith("/"):
-            base_for_next = page_url
-        else:
-            base_for_next = page_url.rsplit("/", 1)[0] + "/"
-        next_url = urljoin(base_for_next, href)
-    else:
-        next_url = None
+    next_url = _abs(next_link.get("href") if next_link else None, page_url)
 
     return items, next_url
 

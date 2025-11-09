@@ -4,7 +4,7 @@ import httpx
 import pytest
 from tenacity import RetryError
 
-from src.fetcher import Fetcher, FetcherConfig, RetryableStatus
+from scraper.fetcher import Fetcher, FetcherConfig, RetryableStatus
 
 
 class _FakeResponse:

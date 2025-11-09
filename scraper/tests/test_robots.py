@@ -3,9 +3,9 @@ from urllib.robotparser import RobotFileParser
 
 import pytest
 
-from src.robots import RobotsHandler
+from scraper.robots import RobotsHandler
 
-logging.getLogger("src.robots").setLevel(logging.INFO)
+logging.getLogger("scraper.robots").setLevel(logging.INFO)
 
 
 def test_construct_without_network(monkeypatch):

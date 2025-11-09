@@ -26,11 +26,11 @@ From `/Users/yanglixin/webscrape-books/scraper`:
    ```
 2. **Kick off a polite crawl** (writes `data/items.jsonl`)
    ```bash
-   python3 -m src.main --max-pages=3 --delay-ms=800 --user-agent "book-scraper/0.1 (+yourname)"
+   python3 -m scraper.main --site=books --max-pages=3 --delay-ms=800 --user-agent "book-scraper/0.1 (+yourname)"
    ```
 3. **Dry run option** (parse + log without writing)
    ```bash
-   python3 -m src.main --max-pages=2 --dry-run
+   python3 -m scraper.main --site=books --max-pages=2 --dry-run
    ```
 
 Notes:
