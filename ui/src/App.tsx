@@ -1,104 +1,155 @@
-import { useEffect, useMemo, useState } from 'react'
-import './App.css'
+import React from "react"
 
-type BookItem = {
-  key: string
-  url: string
-  title: string
-  price: number
-  availability: string
-  rating: number
-  category: string
-  site: 'books'
-}
+import Chart from "./components/Chart"
+import DetailPanel from "./components/DetailPanel"
+import Filters, { type SortDir, type SortKey } from "./components/Filters"
+import Pagination from "./components/Pagination"
+import Table from "./components/Table"
+import { clearItemsCache, loadItems, type BookItem } from "./lib/loadData"
+import { exportRowsToCsv } from "./lib/exportCsv"
+import { useDebouncedValue } from "./lib/useDebouncedValue"
 
 export default function App() {
-  const [items, setItems] = useState<BookItem[]>([])
-  const [search, setSearch] = useState('')
-  const [category, setCategory] = useState<string>('All')
-  const [sort, setSort] = useState<'price' | 'rating' | 'title'>('price')
+  const [items, setItems] = React.useState<BookItem[] | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
 
-  useEffect(() => {
-    // simplest dev flow: copy scraper/data/items.jsonl -> ui/public/items.jsonl
-    fetch('/items.jsonl')
-      .then((r) => r.text())
-      .then((t) =>
-        t
-          .split('\n')
-          .filter(Boolean)
-          .map((line) => JSON.parse(line) as BookItem),
-      )
-      .then(setItems)
-      .catch(console.error)
+  const [search, setSearch] = React.useState("")
+  const debouncedSearch = useDebouncedValue(search, 250)
+
+  const [selectedCategories, setSelectedCategories] = React.useState<string[]>([])
+  const [ratingRange, setRatingRange] = React.useState<[number, number]>([0, 5])
+
+  const [sortKey, setSortKey] = React.useState<SortKey>("title")
+  const [sortDir, setSortDir] = React.useState<SortDir>("asc")
+  const [pageSize, setPageSize] = React.useState(20)
+  const [page, setPage] = React.useState(1)
+
+  const [chartMode, setChartMode] = React.useState<"category" | "rating">("category")
+  const [selected, setSelected] = React.useState<BookItem | null>(null)
+
+  React.useEffect(() => {
+    loadItems()
+      .then((data) => {
+        setItems(data)
+        setError(null)
+      })
+      .catch((e) => setError(String(e)))
   }, [])
 
-  const categories = useMemo(() => {
-    const set = new Set(items.map((i) => i.category || ''))
-    return ['All', ...Array.from(set).filter(Boolean).sort()]
+  const onRefresh = React.useCallback(() => {
+    clearItemsCache()
+    loadItems({ forceRefresh: true })
+      .then((data) => {
+        setItems(data)
+        setError(null)
+        setPage(1)
+      })
+      .catch((e) => setError(String(e)))
+  }, [])
+
+  const clearFilters = React.useCallback(() => {
+    setSearch("")
+    setSelectedCategories([])
+    setRatingRange([0, 5])
+    setSortKey("title")
+    setSortDir("asc")
+    setPageSize(20)
+    setPage(1)
+  }, [])
+
+  const categories = React.useMemo(() => {
+    if (!items) return []
+    const s = new Set(items.map((i) => i.category ?? ""))
+    const arr = Array.from(s)
+    arr.sort((a, b) => a.localeCompare(b))
+    return arr
   }, [items])
 
-  const filtered = useMemo(() => {
-    let rows = items
-    if (search) {
-      const q = search.toLowerCase()
-      rows = rows.filter((r) => r.title.toLowerCase().includes(q))
-    }
-    if (category !== 'All') rows = rows.filter((r) => r.category === category)
-    rows = [...rows].sort((a, b) => {
-      if (sort === 'price') return a.price - b.price
-      if (sort === 'rating') return b.rating - a.rating
-      return a.title.localeCompare(b.title)
+  React.useEffect(() => {
+    setPage(1)
+  }, [debouncedSearch, selectedCategories, ratingRange, sortKey, sortDir, pageSize])
+
+  const filtered = React.useMemo(() => {
+    if (!items) return []
+    const q = debouncedSearch.trim().toLowerCase()
+    const catsActive = selectedCategories.length > 0
+
+    const rows = items.filter((i) => {
+      const matchSearch = q ? i.title.toLowerCase().includes(q) : true
+      const categoryKey = i.category ?? ""
+      const matchCategory = catsActive ? selectedCategories.includes(categoryKey) : true
+      const matchRating = i.rating >= ratingRange[0] && i.rating <= ratingRange[1]
+      return matchSearch && matchCategory && matchRating
     })
+
+    rows.sort((a, b) => {
+      let cmp = 0
+      if (sortKey === "title") cmp = a.title.localeCompare(b.title)
+      else if (sortKey === "price") cmp = a.price - b.price
+      else cmp = a.rating - b.rating
+      return sortDir === "asc" ? cmp : -cmp
+    })
+
     return rows
-  }, [items, search, category, sort])
+  }, [items, debouncedSearch, selectedCategories, ratingRange, sortKey, sortDir])
+
+  const paged = React.useMemo(() => {
+    const start = (page - 1) * pageSize
+    return filtered.slice(start, start + pageSize)
+  }, [filtered, page, pageSize])
+
+  const exportCsv = React.useCallback(() => {
+    exportRowsToCsv("books_visible.csv", paged)
+  }, [paged])
 
   return (
-    <div className="container">
-      <h1>Books Explorer</h1>
-      <div className="controls">
-        <input
-          placeholder="Search title…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select value={category} onChange={(e) => setCategory(e.target.value)}>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as any)}>
-          <option value="price">Sort by Price</option>
-          <option value="rating">Sort by Rating</option>
-          <option value="title">Sort by Title</option>
-        </select>
-      </div>
+    <div className="mx-auto max-w-6xl bg-white p-6">
+      <header className="mb-6 flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Books Explorer</h1>
+          <p className="text-gray-600">
+            Data loaded from <code>/items.jsonl</code> (cached locally for faster reloads)
+          </p>
+        </div>
+      </header>
 
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>Category</th>
-            <th>Price</th>
-            <th>Rating</th>
-            <th>Availability</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((b) => (
-            <tr key={b.key} onClick={() => window.open(b.url, '_blank')}>
-              <td>{b.title}</td>
-              <td>{b.category || '—'}</td>
-              <td>£{b.price.toFixed(2)}</td>
-              <td>{b.rating}</td>
-              <td>{b.availability}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {error && (
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-red-700">
+          {error}
+        </div>
+      )}
 
-      {/* Later: add <Chart /> to show counts by category or rating */}
+      {items === null ? (
+        <div className="text-gray-600">Loading…</div>
+      ) : (
+        <>
+          <Filters
+            search={search}
+            setSearch={setSearch}
+            selectedCategories={selectedCategories}
+            setSelectedCategories={setSelectedCategories}
+            categories={categories}
+            ratingRange={ratingRange}
+            setRatingRange={setRatingRange}
+            sortKey={sortKey}
+            setSortKey={setSortKey}
+            sortDir={sortDir}
+            setSortDir={setSortDir}
+            pageSize={pageSize}
+            setPageSize={setPageSize}
+            onRefresh={onRefresh}
+            onExportCsv={exportCsv}
+          />
+
+          <Chart items={filtered} mode={chartMode} setMode={setChartMode} />
+
+          <Table rows={paged} onRowClick={setSelected} onClearFilters={clearFilters} />
+
+          <Pagination page={page} setPage={setPage} total={filtered.length} pageSize={pageSize} />
+
+          <DetailPanel item={selected} onClose={() => setSelected(null)} />
+        </>
+      )}
     </div>
   )
 }
